@@ -31,7 +31,11 @@ pub(crate) fn emit(
 ) {
     let line = document.source.location(span.start).line;
     if !document.directives.suppresses(rule, line, config) {
-        out.push(Diagnostic::new(rule, span, message, suggestion));
+        let mut diagnostic = Diagnostic::new(rule, span, message, suggestion);
+        if rule.definition().metadata.heuristic {
+            diagnostic.severity = crate::diagnostic::Severity::Warning;
+        }
+        out.push(diagnostic);
     }
 }
 

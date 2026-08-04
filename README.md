@@ -87,8 +87,9 @@ severity = ENG003:warning
 
 A profile's `paths` use `/` separators. A trailing `/**` matches descendants.
 `ignore_rules` removes findings for that profile. `enable_rules` or `rules`
-limits the profile to the listed rules. `severity` accepts `error`, `warning`,
-or `info`. Profiles do not rewrite files or modify the source text.
+limits the profile to the listed rules. `severity` accepts `error`, `warning`, or `info`. Profiles do not rewrite files
+or modify the source text. See [`FACTORY-PROMPT.md`](FACTORY-PROMPT.md) for a
+repository-specific policy and review workflow.
 
 Descriptive text has a 25-word sentence limit. Procedural text has a 20-word limit.
 The linter uses procedural-looking headings such as `Install`, `Configure`, and

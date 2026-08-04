@@ -144,7 +144,7 @@ severity = ENG003:warning
     assert_has(&output, "guide.md:1:13: ENG003 [warning]");
     assert_not_has(&output, "guide.md:1:35: ENG014");
     assert_has(&output, "README.md:1:13: ENG003 [error]");
-    assert_has(&output, "README.md:1:38: ENG014 [error]");
+    assert_has(&output, "README.md:1:38: ENG014 [warning]");
 }
 
 #[test]

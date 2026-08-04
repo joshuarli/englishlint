@@ -67,14 +67,15 @@ impl Config {
 
     pub fn profile_named(&self, path: &Path, name: Option<&str>) -> crate::policy::Profile {
         let mut profile = crate::policy::Profile::default();
-        for candidate in self
+        let matching = self
             .profiles
             .iter()
             .filter(|(candidate_name, profile)| {
                 profile.matches(path) && name.is_none_or(|wanted| wanted == candidate_name.as_str())
             })
             .map(|(_, profile)| profile)
-        {
+            .collect::<Vec<_>>();
+        for candidate in matching {
             profile
                 .ignored_rules
                 .extend(candidate.ignored_rules.iter().copied());
@@ -134,16 +135,19 @@ impl Config {
             };
             let key = line[..equal].trim().to_ascii_lowercase();
             let value = line[equal + 1..].trim();
-            match section.as_str() {
-                "lint" => config.set_lint(&key, value, path, line_number)?,
-                "ignore" => config.set_ignore(&key, value, path, line_number)?,
-                section if section.starts_with("profile.") => config.set_profile(
+            if section.starts_with("profile.") {
+                config.set_profile(
                     section.trim_start_matches("profile."),
                     &key,
                     value,
                     path,
                     line_number,
-                )?,
+                )?;
+                continue;
+            }
+            match section.as_str() {
+                "lint" => config.set_lint(&key, value, path, line_number)?,
+                "ignore" => config.set_ignore(&key, value, path, line_number)?,
                 "glossary" => {
                     if !matches!(key.as_str(), "check" | "config" | "delete") {
                         return Err(ConfigError::UnknownGlossaryConcept {
@@ -158,7 +162,7 @@ impl Config {
                     return Err(ConfigError::UnknownSection {
                         path: path.to_path_buf(),
                         line: line_number,
-                        section,
+                        section: section.clone(),
                     })
                 }
             }
@@ -207,7 +211,7 @@ impl Config {
     ) -> Result<(), ConfigError> {
         let profile = self.profiles.entry(name.to_string()).or_default();
         match key {
-            "paths" | "include" => profile.paths = split_list(value),
+            "paths" | "include" => profile.paths = split_paths(value),
             "ignore_rules" => add_profile_rules(&mut profile.ignored_rules, value, path, line)?,
             "enable_rules" | "rules" => {
                 add_profile_rules(&mut profile.enabled_rules, value, path, line)?
@@ -333,6 +337,14 @@ fn parse_positive(value: &str, key: &str, path: &Path, line: usize) -> Result<us
 fn unquote(value: &str) -> String {
     value.trim_matches('"').trim_matches('\'').to_string()
 }
+fn split_paths(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(|item| unquote(item.trim()))
+        .filter(|item| !item.is_empty())
+        .collect()
+}
+
 fn split_list(value: &str) -> Vec<String> {
     value
         .split(',')
