@@ -12,6 +12,7 @@ pub struct Word {
 pub struct Sentence {
     pub span: Span,
     pub mode: TextMode,
+    pub block: usize,
     pub words: Vec<Word>,
 }
 
@@ -35,7 +36,6 @@ impl Analysis {
         for prose in &document.prose {
             let text = &document.source.text[prose.span.start.0..prose.span.end.0];
             let mut start = None;
-            let mut previous = None;
             for (offset, character) in text.char_indices() {
                 if start.is_none() && !character.is_whitespace() {
                     start = Some(offset);
@@ -48,48 +48,35 @@ impl Analysis {
                 if boundary {
                     if let Some(begin) = start.take() {
                         let end = offset + character.len_utf8();
-                        let span = Span::new(prose.span.start.0 + begin, prose.span.start.0 + end);
-                        let words = tokenize(
-                            &document.source.text[span.start.0..span.end.0],
-                            span.start.0,
-                        );
-                        all_words.extend(words.iter().cloned());
-                        sentences.push(Sentence {
-                            span,
-                            mode: prose.mode,
-                            words,
-                        });
+                        add_sentence(&mut sentences, &mut all_words, document, prose, begin, end);
                     }
                 }
-                previous = Some(offset);
             }
             if let Some(begin) = start {
-                let end = text.len();
-                if previous.is_some() {
-                    let span = Span::new(prose.span.start.0 + begin, prose.span.start.0 + end);
-                    let words = tokenize(
-                        &document.source.text[span.start.0..span.end.0],
-                        span.start.0,
-                    );
-                    all_words.extend(words.iter().cloned());
-                    sentences.push(Sentence {
-                        span,
-                        mode: prose.mode,
-                        words,
-                    });
-                }
+                add_sentence(
+                    &mut sentences,
+                    &mut all_words,
+                    document,
+                    prose,
+                    begin,
+                    text.len(),
+                );
             }
         }
+
         sentences.sort_by_key(|sentence| sentence.span.start);
         let mut paragraphs = Vec::new();
         let mut current = Vec::new();
         for (index, sentence) in sentences.iter().enumerate() {
-            let before = &document.source.text[current
+            let starts_new_block = current
                 .last()
-                .map(|last: &usize| sentences[*last].span.end.0)
-                .unwrap_or(sentence.span.start.0)
-                ..sentence.span.start.0];
-            if !current.is_empty() && (before.contains("\n\n") || before.contains("\n#")) {
+                .is_some_and(|last: &usize| sentences[*last].block != sentence.block);
+            let starts_new_paragraph = current.last().is_some_and(|last: &usize| {
+                sentence.span.start.0 > sentences[*last].span.end.0
+                    && document.source.text[sentences[*last].span.end.0..sentence.span.start.0]
+                        .contains("\n\n")
+            });
+            if starts_new_block || starts_new_paragraph {
                 paragraphs.push(paragraph(&sentences, &current));
                 current.clear();
             }
@@ -104,6 +91,28 @@ impl Analysis {
             words: all_words,
         }
     }
+}
+
+fn add_sentence(
+    sentences: &mut Vec<Sentence>,
+    all_words: &mut Vec<Word>,
+    document: &Document,
+    prose: &crate::document::ProseSpan,
+    begin: usize,
+    end: usize,
+) {
+    let span = Span::new(prose.span.start.0 + begin, prose.span.start.0 + end);
+    let words = tokenize(
+        &document.source.text[span.start.0..span.end.0],
+        span.start.0,
+    );
+    all_words.extend(words.iter().cloned());
+    sentences.push(Sentence {
+        span,
+        mode: prose.mode,
+        block: prose.block,
+        words,
+    });
 }
 
 fn paragraph(sentences: &[Sentence], indices: &[usize]) -> Paragraph {

@@ -7,6 +7,7 @@ pub struct DirectiveSet {
     file: HashSet<RuleId>,
     lines: HashMap<usize, HashSet<RuleId>>,
     pub words: HashSet<String>,
+    pub profile: Option<String>,
 }
 
 impl DirectiveSet {
@@ -28,6 +29,11 @@ impl DirectiveSet {
             };
             let values: Vec<&str> = fields.collect();
             match action {
+                "profile" => {
+                    result.profile = values
+                        .first()
+                        .map(|value| value.trim_matches(',').to_string())
+                }
                 "ignore-file" => result.add_rules(&values, None),
                 "ignore" | "ignore-next-line" => result.add_rules(&values, Some(line_index + 2)),
                 "ignore-line" => result.add_rules(&values, Some(line_index + 1)),

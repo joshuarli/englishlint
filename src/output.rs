@@ -8,11 +8,12 @@ pub fn render(source: &SourceFile, root: &Path, diagnostic: &Diagnostic) -> Stri
     let mut output = String::new();
     writeln!(
         output,
-        "{}:{}:{}: {} {}",
+        "{}:{}:{}: {} [{}] {}",
         source.display_path(root),
         location.line,
         location.column,
         diagnostic.rule,
+        severity_name(diagnostic.severity),
         diagnostic.message
     )
     .unwrap();
@@ -20,4 +21,12 @@ pub fn render(source: &SourceFile, root: &Path, diagnostic: &Diagnostic) -> Stri
         writeln!(output, "  suggestion: {}", suggestion.message).unwrap();
     }
     output
+}
+
+fn severity_name(severity: crate::diagnostic::Severity) -> &'static str {
+    match severity {
+        crate::diagnostic::Severity::Error => "error",
+        crate::diagnostic::Severity::Warning => "warning",
+        crate::diagnostic::Severity::Info => "info",
+    }
 }

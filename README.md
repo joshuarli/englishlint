@@ -25,6 +25,8 @@ cargo build --release
 The library also exposes `lint_text` for editors and other Rust callers. It returns
 structured diagnostics with source spans; the CLI is only one renderer.
 
+Each finding includes its severity as `[error]`, `[warning]`, or `[info]`. Profiles can suppress or limit rules for path classes without changing the source.
+
 The command walks `.md` files in deterministic path order, respects `.gitignore`,
 and follows no symlinks. It lints visible prose only. It ignores fenced code, inline
 code, URLs, link destinations, HTML comments, and YAML front matter. Markdown headings
@@ -67,6 +69,26 @@ ignore_words = widget
 check = make sure
 config = configuration
 ```
+
+Profiles apply different rule policies to path classes. They are useful when a
+repository contains user guidance, contracts, templates, or exact-output text:
+
+```ini
+[profile.guidance]
+paths = README.md, AGENTS.md, docs/**, roles/**, runtime/**
+ignore_rules = ENG011, ENG014
+severity = ENG001:error, ENG012:warning
+
+[profile.contracts]
+paths = tickets/**, evals/**, templates/**
+ignore_rules = ENG001, ENG004, ENG009, ENG011, ENG013, ENG014
+severity = ENG003:warning
+```
+
+A profile's `paths` use `/` separators. A trailing `/**` matches descendants.
+`ignore_rules` removes findings for that profile. `enable_rules` or `rules`
+limits the profile to the listed rules. `severity` accepts `error`, `warning`,
+or `info`. Profiles do not rewrite files or modify the source text.
 
 Descriptive text has a 25-word sentence limit. Procedural text has a 20-word limit.
 The linter uses procedural-looking headings such as `Install`, `Configure`, and

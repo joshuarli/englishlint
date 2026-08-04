@@ -16,3 +16,16 @@ ignore_words =
 # check = make sure
 # config = configuration
 # delete = delete
+
+
+# Profiles let a repository apply different rules to different Markdown classes.
+# Paths use / separators. A trailing /** matches all descendants.
+[profile.guidance]
+paths = README.md, AGENTS.md, NORTH-STAR.md, FACTORY.md, CTO.md, docs/**, roles/**, runtime/**
+ignore_rules = ENG011, ENG014
+severity = ENG001:error, ENG003:error, ENG004:error, ENG012:warning
+
+[profile.contracts]
+paths = tickets/**, evals/**, templates/**
+ignore_rules = ENG001, ENG004, ENG009, ENG011, ENG013, ENG014
+severity = ENG003:warning, ENG005:warning, ENG006:warning

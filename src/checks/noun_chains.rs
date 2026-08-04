@@ -16,6 +16,9 @@ pub(crate) fn check(
         "can", "will", "must", "from", "by", "as", "at",
     ];
     for window in analysis.words.windows(5) {
+        if !same_sentence(document, window[0].span.start.0, window[4].span.end.0) {
+            continue;
+        }
         let between = &document.source.text[window[0].span.end.0..window[4].span.start.0];
         if ["a", "an", "the"].contains(&window[0].text.to_ascii_lowercase().as_str())
             && !between.contains(['.', '!', '?', ':', ',', '`', '[', ']'])
@@ -43,4 +46,8 @@ pub(crate) fn check(
             break;
         }
     }
+}
+
+fn same_sentence(document: &Document, start: usize, end: usize) -> bool {
+    !document.source.text[start..end].contains(['.', '!', '?', ':'])
 }

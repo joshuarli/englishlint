@@ -16,6 +16,9 @@ pub(crate) fn check(
         for (offset, character) in document.source.text_for(prose.span).char_indices() {
             if character == ';' {
                 let span = Span::new(prose.span.start.0 + offset, prose.span.start.0 + offset + 1);
+                if document.is_protected(span) {
+                    continue;
+                }
                 super::emit(
                     out,
                     document,

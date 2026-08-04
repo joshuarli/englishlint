@@ -17,7 +17,23 @@ pub(crate) fn check(
             if character == ',' {
                 let tail = text[offset + 1..].trim_start();
                 if let Some(word) = tail.split_whitespace().next() {
-                    if word.ends_with("ing") && word != "including" {
+                    if matches!(
+                        word,
+                        "making"
+                            | "allowing"
+                            | "enabling"
+                            | "ensuring"
+                            | "highlighting"
+                            | "creating"
+                            | "providing"
+                            | "offering"
+                            | "helping"
+                            | "reducing"
+                            | "improving"
+                            | "leading"
+                            | "causing"
+                            | "resulting"
+                    ) {
                         let span = Span::new(
                             sentence.span.start.0 + offset,
                             sentence.span.start.0 + offset + 1,

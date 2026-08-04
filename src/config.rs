@@ -15,6 +15,7 @@ pub struct Config {
     pub ignored_words: HashSet<String>,
     pub glossary: HashMap<String, String>,
     pub max_file_bytes: usize,
+    pub profiles: HashMap<String, crate::policy::Profile>,
 }
 
 impl Default for Config {
@@ -54,11 +55,56 @@ impl Default for Config {
             ignored_words: HashSet::new(),
             glossary: HashMap::new(),
             max_file_bytes: 10 * 1024 * 1024,
+            profiles: HashMap::new(),
         }
     }
 }
 
 impl Config {
+    pub fn profile_for(&self, path: &Path) -> crate::policy::Profile {
+        self.profile_named(path, None)
+    }
+
+    pub fn profile_named(&self, path: &Path, name: Option<&str>) -> crate::policy::Profile {
+        let mut profile = crate::policy::Profile::default();
+        for candidate in self
+            .profiles
+            .iter()
+            .filter(|(candidate_name, profile)| {
+                profile.matches(path) && name.is_none_or(|wanted| wanted == candidate_name.as_str())
+            })
+            .map(|(_, profile)| profile)
+        {
+            profile
+                .ignored_rules
+                .extend(candidate.ignored_rules.iter().copied());
+            profile
+                .enabled_rules
+                .extend(candidate.enabled_rules.iter().copied());
+            profile
+                .ignored_words
+                .extend(candidate.ignored_words.iter().cloned());
+            profile.severity.extend(
+                candidate
+                    .severity
+                    .iter()
+                    .map(|(rule, severity)| (*rule, *severity)),
+            );
+        }
+        profile
+    }
+
+    pub(crate) fn with_profile(&self, profile: &crate::policy::Profile) -> Self {
+        let mut effective = self.clone();
+        effective
+            .ignored_rules
+            .extend(profile.ignored_rules.iter().copied());
+        effective
+            .ignored_words
+            .extend(profile.ignored_words.iter().cloned());
+        effective
+    }
+
     pub fn read(path: &Path) -> Result<Self, ConfigError> {
         let mut config = Self::default();
         if !path.exists() {
@@ -91,6 +137,13 @@ impl Config {
             match section.as_str() {
                 "lint" => config.set_lint(&key, value, path, line_number)?,
                 "ignore" => config.set_ignore(&key, value, path, line_number)?,
+                section if section.starts_with("profile.") => config.set_profile(
+                    section.trim_start_matches("profile."),
+                    &key,
+                    value,
+                    path,
+                    line_number,
+                )?,
                 "glossary" => {
                     if !matches!(key.as_str(), "check" | "config" | "delete") {
                         return Err(ConfigError::UnknownGlossaryConcept {
@@ -144,6 +197,67 @@ impl Config {
         Ok(())
     }
 
+    fn set_profile(
+        &mut self,
+        name: &str,
+        key: &str,
+        value: &str,
+        path: &Path,
+        line: usize,
+    ) -> Result<(), ConfigError> {
+        let profile = self.profiles.entry(name.to_string()).or_default();
+        match key {
+            "paths" | "include" => profile.paths = split_list(value),
+            "ignore_rules" => add_profile_rules(&mut profile.ignored_rules, value, path, line)?,
+            "enable_rules" | "rules" => {
+                add_profile_rules(&mut profile.enabled_rules, value, path, line)?
+            }
+            "ignore_words" => profile.ignored_words.extend(split_list(value)),
+            "severity" => {
+                for item in split_list(value) {
+                    let Some((raw_rule, raw_severity)) = item.split_once(':') else {
+                        return Err(invalid(
+                            path,
+                            line,
+                            key,
+                            value,
+                            "use ENG001:error,ENG014:warning",
+                        ));
+                    };
+                    let rule = RuleId::parse(raw_rule).ok_or_else(|| ConfigError::UnknownRule {
+                        path: path.to_path_buf(),
+                        line,
+                        value: raw_rule.into(),
+                    })?;
+                    let severity = match raw_severity {
+                        "error" => crate::diagnostic::Severity::Error,
+                        "warning" => crate::diagnostic::Severity::Warning,
+                        "info" => crate::diagnostic::Severity::Info,
+                        _ => {
+                            return Err(invalid(
+                                path,
+                                line,
+                                key,
+                                raw_severity,
+                                "must be error, warning, or info",
+                            ))
+                        }
+                    };
+                    profile.severity.insert(rule, severity);
+                }
+            }
+            _ => {
+                return Err(ConfigError::UnknownKey {
+                    path: path.to_path_buf(),
+                    line,
+                    section: format!("profile.{name}"),
+                    key: key.into(),
+                })
+            }
+        }
+        Ok(())
+    }
+
     fn set_ignore(
         &mut self,
         key: &str,
@@ -177,6 +291,23 @@ impl Config {
         }
         Ok(())
     }
+}
+
+fn add_profile_rules(
+    target: &mut HashSet<RuleId>,
+    value: &str,
+    path: &Path,
+    line: usize,
+) -> Result<(), ConfigError> {
+    for raw in split_list(value) {
+        let rule = RuleId::parse(&raw).ok_or_else(|| ConfigError::UnknownRule {
+            path: path.to_path_buf(),
+            line,
+            value: raw.clone(),
+        })?;
+        target.insert(rule);
+    }
+    Ok(())
 }
 
 fn invalid(path: &Path, line: usize, key: &str, value: &str, message: &str) -> ConfigError {
@@ -236,6 +367,19 @@ mod tests {
         assert_eq!(config.glossary["check"], "verify");
         let _ = fs::remove_file(path);
     }
+    #[test]
+    fn parses_profiles_and_severity() {
+        let path = fixture("[profile.guidance]\npaths = docs/**, README.md\nignore_rules = ENG014\nseverity = ENG001:error,ENG003:warning\n");
+        let config = Config::read(&path).unwrap();
+        let profile = config.profile_for(Path::new("docs/guide.md"));
+        assert!(profile.ignored_rules.contains(&RuleId::PassiveVoice));
+        assert_eq!(
+            profile.severity[&RuleId::BannedModal],
+            crate::diagnostic::Severity::Warning
+        );
+        let _ = fs::remove_file(path);
+    }
+
     #[test]
     fn rejects_unknown_rule_and_glossary() {
         for contents in [

@@ -1,3 +1,10 @@
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum Severity {
+    Error,
+    Warning,
+    Info,
+}
+
 use crate::rules::RuleId;
 use crate::source::{Location, SourceFile, Span};
 
@@ -16,6 +23,7 @@ pub struct Replacement {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Diagnostic {
     pub rule: RuleId,
+    pub severity: Severity,
     pub span: Span,
     pub message: String,
     pub suggestion: Option<Suggestion>,
@@ -30,6 +38,7 @@ impl Diagnostic {
     ) -> Self {
         Self {
             rule,
+            severity: Severity::Error,
             span,
             message: message.into(),
             suggestion: Some(Suggestion {

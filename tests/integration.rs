@@ -117,6 +117,59 @@ fn reports_rules_with_relative_file_line_column_and_suggestion() {
 }
 
 #[test]
+fn path_profiles_filter_rules_and_set_severity() {
+    let project = TempProject::new();
+    project.write(
+        "englishlint.ini",
+        "[profile.guidance]
+paths = docs/**
+ignore_rules = ENG014
+severity = ENG003:warning
+",
+    );
+    project.write(
+        "docs/guide.md",
+        "The service should work. The service is configured.
+",
+    );
+    project.write(
+        "README.md",
+        "The service should work. The service is configured.
+",
+    );
+
+    let output = project.run(&["."]);
+
+    assert_eq!(output.status, 1);
+    assert_has(&output, "guide.md:1:13: ENG003 [warning]");
+    assert_not_has(&output, "guide.md:1:35: ENG014");
+    assert_has(&output, "README.md:1:13: ENG003 [error]");
+    assert_has(&output, "README.md:1:38: ENG014 [error]");
+}
+
+#[test]
+fn inline_profile_selects_named_profile() {
+    let project = TempProject::new();
+    project.write(
+        "englishlint.ini",
+        "[profile.contracts]
+paths = docs/**
+ignore_rules = ENG003
+",
+    );
+    project.write(
+        "docs/contract.md",
+        "<!-- englishlint: profile contracts -->
+The service should work.
+",
+    );
+
+    let output = project.run(&["."]);
+
+    assert_eq!(output.status, 0, "{}", output.stdout);
+}
+
+#[test]
 fn custom_ini_changes_modes_limits_headings_and_ignored_rules() {
     let project = TempProject::new();
     project.write(
@@ -256,7 +309,7 @@ fn catches_its_contraction_but_does_not_treat_a_possessive_as_one() {
     let output = project.run(&["."]);
 
     assert_eq!(output.status, 1);
-    assert_has(&output, "ENG002 contraction 'It's'");
+    assert_has(&output, "ENG002 [error] contraction 'It's'");
     assert_not_has(&output, "contraction 'service's'");
 }
 
@@ -265,7 +318,7 @@ fn every_catalog_rule_has_a_cli_regression_fixture() {
     let project = TempProject::new();
     project.write(
         "README.md",
-        "This sentence contains more than twenty five words and exists only to exercise the sentence length rule in the deterministic linter fixture for this production regression test.\n\nIt's ready; e.g. simply use the robust configuration before the service has been updated, making the result clear if the request fails.\n\nThe connection pool timeout configuration value is documented here.\n\nOne. Two. Three. Four. Five. Six. Seven.\n\nThe file is updated. The colour is wrong.\n\n<!-- englishlint: procedural -->\nRun the command and check the file if the build fails. The service should run.\n\nCheck the account. Verify the account.\n",
+        "This sentence contains more than twenty five words and exists only to exercise the sentence length rule in the deterministic linter fixture for this production regression test.\n\nIt's ready; e.g. simply use the robust configuration before the service has been updated, making the result clear if the request fails.\n\nThe connection pool timeout configuration value is documented here.\n\nOne. Two. Three. Four. Five. Six. Seven.\n\nThe file is updated. The colour is wrong.\n\n<!-- englishlint: procedural -->\nRun the command and check the file if the build fails. The service should run.\n\nThe service retries, handling the error.\n\nCheck the account. Verify the account.\n",
     );
 
     let output = project.run(&["."]);

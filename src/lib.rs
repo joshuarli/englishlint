@@ -1,3 +1,5 @@
+mod policy;
+
 pub mod cli;
 pub mod output;
 
@@ -78,7 +80,14 @@ pub fn lint_directory(root: &Path, config: &Config) -> Result<Vec<LintedFile>, L
                 path: path.clone(),
                 source: error,
             })?;
-            let (source, diagnostics) = lint_text(path, source, config);
+            let relative_path = path.strip_prefix(root).unwrap_or(&path);
+            let document = Document::parse(path.clone(), source, config);
+            let profile =
+                config.profile_named(relative_path, document.directives.profile.as_deref());
+            let effective_config = config.with_profile(&profile);
+            let mut diagnostics = lint::lint_document(&document, &effective_config);
+            policy::apply_profile(&mut diagnostics, &profile);
+            let source = document.source;
             Ok(LintedFile {
                 source,
                 diagnostics,
