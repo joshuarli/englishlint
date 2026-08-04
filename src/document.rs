@@ -13,7 +13,6 @@ pub struct ProseSpan {
 pub struct Document {
     pub source: SourceFile,
     pub prose: Vec<ProseSpan>,
-    pub headings: Vec<Span>,
     pub directives: DirectiveSet,
 }
 
@@ -81,6 +80,9 @@ impl Document {
             if trimmed.starts_with('[') && trimmed.contains("]: ") {
                 continue;
             }
+            if trimmed.starts_with('[') && trimmed.contains("](") {
+                continue;
+            }
 
             let mut visible_start = start + line.len() - line.trim_start().len();
             if let Some(marker_end) =
@@ -107,10 +109,10 @@ impl Document {
             }
         }
 
+        let prose = merge_prose(prose, &source_file.text);
         Self {
             source: source_file,
             prose,
-            headings,
             directives,
         }
     }
@@ -127,6 +129,22 @@ impl Document {
             })
             .collect()
     }
+}
+
+fn merge_prose(mut spans: Vec<ProseSpan>, source: &str) -> Vec<ProseSpan> {
+    let mut merged: Vec<ProseSpan> = Vec::new();
+    for span in spans.drain(..) {
+        let can_merge = merged.last().is_some_and(|previous| {
+            previous.mode == span.mode
+                && !source[previous.span.end.0..span.span.start.0].contains("\n\n")
+        });
+        if can_merge {
+            merged.last_mut().unwrap().span.end = span.span.end;
+        } else {
+            merged.push(span);
+        }
+    }
+    merged
 }
 
 fn heading_mode(heading: &str, config: &Config) -> TextMode {

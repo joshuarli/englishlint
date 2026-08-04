@@ -46,6 +46,14 @@ impl LineIndex {
     }
 
     pub fn location(&self, text: &str, offset: ByteOffset) -> Location {
+        assert!(
+            offset.0 <= text.len(),
+            "location offset must be within the source"
+        );
+        assert!(
+            text.is_char_boundary(offset.0),
+            "location offset must be a UTF-8 boundary"
+        );
         let index = match self.starts.binary_search(&offset.0) {
             Ok(index) => index,
             Err(index) => index.saturating_sub(1),
@@ -82,7 +90,15 @@ impl SourceFile {
     }
 
     pub fn text_for(&self, span: Span) -> &str {
-        &self.text[span.start.0.min(self.text.len())..span.end.0.min(self.text.len())]
+        assert!(
+            span.end.0 <= self.text.len(),
+            "span must be within the source"
+        );
+        assert!(
+            self.text.is_char_boundary(span.start.0) && self.text.is_char_boundary(span.end.0),
+            "span must use UTF-8 boundaries"
+        );
+        &self.text[span.start.0..span.end.0]
     }
 
     pub fn display_path(&self, root: &Path) -> String {

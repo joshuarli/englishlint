@@ -22,10 +22,17 @@ cargo build --release
 ./target/release/englishlint --config config/englishlint.ini docs/
 ```
 
+The library also exposes `lint_text` for editors and other Rust callers. It returns
+structured diagnostics with source spans; the CLI is only one renderer.
+
 The command walks `.md` files in deterministic path order, respects `.gitignore`,
 and follows no symlinks. It lints visible prose only. It ignores fenced code, inline
 code, URLs, link destinations, HTML comments, and YAML front matter. Markdown headings
 are not counted as sentences.
+
+Files larger than 10 MiB are rejected by default. Set `max_file_bytes` in `[lint]` to
+change this limit. The parser preserves the original UTF-8 source. Diagnostics use
+one-based lines and Unicode-character columns.
 
 Exit codes:
 

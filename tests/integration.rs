@@ -75,6 +75,17 @@ fn assert_not_has(output: &Output, needle: &str) {
 }
 
 #[test]
+fn lint_text_api_returns_diagnostics_without_filesystem_traversal() {
+    let config = englishlint::config::Config::default();
+    let (source, diagnostics) =
+        englishlint::lint_text("memory.md", "The service should work.".to_string(), &config);
+    assert_eq!(source.path, std::path::PathBuf::from("memory.md"));
+    assert!(diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.rule == englishlint::rules::RuleId::BannedModal));
+}
+
+#[test]
 fn clean_project_returns_zero_and_does_not_lint_code_or_metadata() {
     let project = TempProject::new();
     project.write(

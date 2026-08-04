@@ -2,8 +2,15 @@ use crate::rules::RuleId;
 use crate::source::{Location, SourceFile, Span};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Suggestion {
-    Message(String),
+pub struct Suggestion {
+    pub message: String,
+    pub replacement: Option<Replacement>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Replacement {
+    pub span: Span,
+    pub text: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,7 +32,10 @@ impl Diagnostic {
             rule,
             span,
             message: message.into(),
-            suggestion: Some(Suggestion::Message(suggestion.into())),
+            suggestion: Some(Suggestion {
+                message: suggestion.into(),
+                replacement: None,
+            }),
         }
     }
 

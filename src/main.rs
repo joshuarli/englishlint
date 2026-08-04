@@ -1,56 +1,11 @@
 use englishlint::config::Config;
-use englishlint::diagnostic::Suggestion;
 use englishlint::lint_directory;
 use std::env;
 use std::path::PathBuf;
 use std::process;
 
-struct Args {
-    config: Option<PathBuf>,
-    root: Option<PathBuf>,
-    help: bool,
-    version: bool,
-}
-
-fn parse_args() -> Result<Args, String> {
-    let mut args = Args {
-        config: None,
-        root: None,
-        help: false,
-        version: false,
-    };
-    let values: Vec<String> = env::args().skip(1).collect();
-    let mut index = 0;
-    while index < values.len() {
-        match values[index].as_str() {
-            "-h" | "--help" => args.help = true,
-            "--version" => args.version = true,
-            "-c" | "--config" => {
-                index += 1;
-                let Some(path) = values.get(index) else {
-                    return Err("--config requires a file".into());
-                };
-                args.config = Some(PathBuf::from(path));
-            }
-            value if value.starts_with('-') => return Err(format!("unknown option '{value}'")),
-            value => {
-                if args.root.is_some() {
-                    return Err("expected one directory".into());
-                }
-                args.root = Some(PathBuf::from(value));
-            }
-        }
-        index += 1;
-    }
-    Ok(args)
-}
-
-fn print_help() {
-    println!("englishlint - deterministic technical English linter\n\nUsage:\n  englishlint [OPTIONS] <directory>\n\nOptions:\n  -c, --config FILE  Read FILE instead of ./englishlint.ini\n  -h, --help         Show this help\n      --version      Show the version\n\nExit codes:\n  0  no findings\n  1  findings\n  2  usage, configuration, or file error");
-}
-
 fn main() {
-    let args = match parse_args() {
+    let args = match englishlint::cli::parse(env::args().skip(1)) {
         Ok(args) => args,
         Err(error) => {
             eprintln!("englishlint: {error}\nusage: englishlint [OPTIONS] <directory>");
@@ -58,24 +13,27 @@ fn main() {
         }
     };
     if args.help {
-        print_help();
+        println!("{}", englishlint::cli::help());
         return;
     }
     if args.version {
         println!("englishlint {}", env!("CARGO_PKG_VERSION"));
         return;
     }
-    let Some(root) = args.root else {
+    let Some(root_arg) = args.root else {
         eprintln!("usage: englishlint [OPTIONS] <directory>");
         process::exit(2);
     };
-    let root = match root.canonicalize() {
+    let root = match root_arg.canonicalize() {
         Ok(path) => path,
         Err(error) => {
             if error.kind() == std::io::ErrorKind::NotFound {
-                eprintln!("englishlint: '{}' is not a directory", root.display());
+                eprintln!("englishlint: '{}' is not a directory", root_arg.display());
             } else {
-                eprintln!("englishlint: cannot access '{}': {error}", root.display());
+                eprintln!(
+                    "englishlint: cannot access '{}': {error}",
+                    root_arg.display()
+                );
             }
             process::exit(2);
         }
@@ -107,18 +65,10 @@ fn main() {
     for file in results {
         for diagnostic in file.diagnostics {
             total += 1;
-            let location = diagnostic.location(&file.source);
-            println!(
-                "{}:{}:{}: {} {}",
-                file.source.display_path(&root),
-                location.line,
-                location.column,
-                diagnostic.rule,
-                diagnostic.message
+            print!(
+                "{}",
+                englishlint::output::render(&file.source, &root, &diagnostic)
             );
-            if let Some(Suggestion::Message(message)) = diagnostic.suggestion {
-                println!("  suggestion: {message}");
-            }
         }
     }
     if total == 0 {

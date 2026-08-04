@@ -1,3 +1,4 @@
+use crate::error::ConfigError;
 use crate::rules::RuleId;
 use crate::text::TextMode;
 use std::collections::{HashMap, HashSet};
@@ -13,6 +14,7 @@ pub struct Config {
     pub ignored_rules: HashSet<RuleId>,
     pub ignored_words: HashSet<String>,
     pub glossary: HashMap<String, String>,
+    pub max_file_bytes: usize,
 }
 
 impl Default for Config {
@@ -51,20 +53,24 @@ impl Default for Config {
             ignored_rules: HashSet::new(),
             ignored_words: HashSet::new(),
             glossary: HashMap::new(),
+            max_file_bytes: 10 * 1024 * 1024,
         }
     }
 }
 
 impl Config {
-    pub fn read(path: &Path) -> Result<Self, String> {
+    pub fn read(path: &Path) -> Result<Self, ConfigError> {
         let mut config = Self::default();
         if !path.exists() {
             return Ok(config);
         }
-        let source = fs::read_to_string(path)
-            .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+        let source = fs::read_to_string(path).map_err(|source| ConfigError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
         let mut section = String::new();
-        for (line_number, raw) in source.lines().enumerate() {
+        for (line_index, raw) in source.lines().enumerate() {
+            let line_number = line_index + 1;
             let line = raw.trim();
             if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
                 continue;
@@ -74,68 +80,65 @@ impl Config {
                 continue;
             }
             let Some(equal) = line.find('=') else {
-                return Err(format!(
-                    "{}:{}: expected section or key = value",
-                    path.display(),
-                    line_number + 1
-                ));
+                return Err(ConfigError::InvalidSyntax {
+                    path: path.to_path_buf(),
+                    line: line_number,
+                    message: "expected section or key = value".into(),
+                });
             };
             let key = line[..equal].trim().to_ascii_lowercase();
             let value = line[equal + 1..].trim();
             match section.as_str() {
-                "lint" => config.set_lint(&key, value, path, line_number + 1)?,
-                "ignore" => config.set_ignore(&key, value, path, line_number + 1)?,
+                "lint" => config.set_lint(&key, value, path, line_number)?,
+                "ignore" => config.set_ignore(&key, value, path, line_number)?,
                 "glossary" => {
                     if !matches!(key.as_str(), "check" | "config" | "delete") {
-                        return Err(format!(
-                            "{}:{}: unknown glossary concept '{}'",
-                            path.display(),
-                            line_number + 1,
-                            key
-                        ));
+                        return Err(ConfigError::UnknownGlossaryConcept {
+                            path: path.to_path_buf(),
+                            line: line_number,
+                            concept: key,
+                        });
                     }
                     config.glossary.insert(key, unquote(value));
                 }
                 _ => {
-                    return Err(format!(
-                        "{}:{}: unknown section [{}]",
-                        path.display(),
-                        line_number + 1,
-                        section
-                    ))
+                    return Err(ConfigError::UnknownSection {
+                        path: path.to_path_buf(),
+                        line: line_number,
+                        section,
+                    })
                 }
             }
         }
         Ok(config)
     }
 
-    fn set_lint(&mut self, key: &str, value: &str, path: &Path, line: usize) -> Result<(), String> {
+    fn set_lint(
+        &mut self,
+        key: &str,
+        value: &str,
+        path: &Path,
+        line: usize,
+    ) -> Result<(), ConfigError> {
         match key {
             "default_type" => {
                 self.default_mode = TextMode::parse(value).ok_or_else(|| {
-                    format!(
-                        "{}:{}: default_type must be procedural or descriptive",
-                        path.display(),
-                        line
-                    )
+                    invalid(path, line, key, value, "must be procedural or descriptive")
                 })?
             }
-            "descriptive_limit" => {
-                self.descriptive_limit = parse_positive(value, "descriptive_limit", path, line)?
-            }
-            "procedural_limit" => {
-                self.procedural_limit = parse_positive(value, "procedural_limit", path, line)?
-            }
+            "descriptive_limit" => self.descriptive_limit = parse_positive(value, key, path, line)?,
+            "procedural_limit" => self.procedural_limit = parse_positive(value, key, path, line)?,
             "procedural_headings" => self.procedural_headings = split_list(value),
             "ignore_rules" => self.add_rules(value, path, line)?,
             "ignore_words" => self.ignored_words.extend(split_list(value)),
+            "max_file_bytes" => self.max_file_bytes = parse_positive(value, key, path, line)?,
             _ => {
-                return Err(format!(
-                    "{}:{}: unknown [lint] key '{}'",
-                    path.display(),
+                return Err(ConfigError::UnknownKey {
+                    path: path.to_path_buf(),
                     line,
-                    key
-                ))
+                    section: "lint".into(),
+                    key: key.into(),
+                })
             }
         }
         Ok(())
@@ -147,43 +150,51 @@ impl Config {
         value: &str,
         path: &Path,
         line: usize,
-    ) -> Result<(), String> {
+    ) -> Result<(), ConfigError> {
         match key {
             "rules" => self.add_rules(value, path, line)?,
             "words" => self.ignored_words.extend(split_list(value)),
             _ => {
-                return Err(format!(
-                    "{}:{}: unknown [ignore] key '{}'",
-                    path.display(),
+                return Err(ConfigError::UnknownKey {
+                    path: path.to_path_buf(),
                     line,
-                    key
-                ))
+                    section: "ignore".into(),
+                    key: key.into(),
+                })
             }
         }
         Ok(())
     }
 
-    fn add_rules(&mut self, value: &str, path: &Path, line: usize) -> Result<(), String> {
+    fn add_rules(&mut self, value: &str, path: &Path, line: usize) -> Result<(), ConfigError> {
         for raw in split_list(value) {
-            let id = RuleId::parse(&raw)
-                .ok_or_else(|| format!("{}:{}: unknown rule '{}'", path.display(), line, raw))?;
+            let id = RuleId::parse(&raw).ok_or_else(|| ConfigError::UnknownRule {
+                path: path.to_path_buf(),
+                line,
+                value: raw.clone(),
+            })?;
             self.ignored_rules.insert(id);
         }
         Ok(())
     }
 }
 
-fn parse_positive(value: &str, key: &str, path: &Path, line: usize) -> Result<usize, String> {
+fn invalid(path: &Path, line: usize, key: &str, value: &str, message: &str) -> ConfigError {
+    ConfigError::InvalidValue {
+        path: path.to_path_buf(),
+        line,
+        key: key.into(),
+        value: value.into(),
+        message: message.into(),
+    }
+}
+
+fn parse_positive(value: &str, key: &str, path: &Path, line: usize) -> Result<usize, ConfigError> {
     let parsed = value
         .parse::<usize>()
-        .map_err(|_| format!("{}:{}: invalid {}", path.display(), line, key))?;
+        .map_err(|_| invalid(path, line, key, value, "must be a positive integer"))?;
     if parsed == 0 {
-        return Err(format!(
-            "{}:{}: {} must be greater than zero",
-            path.display(),
-            line,
-            key
-        ));
+        return Err(invalid(path, line, key, value, "must be greater than zero"));
     }
     Ok(parsed)
 }
@@ -191,7 +202,6 @@ fn parse_positive(value: &str, key: &str, path: &Path, line: usize) -> Result<us
 fn unquote(value: &str) -> String {
     value.trim_matches('"').trim_matches('\'').to_string()
 }
-
 fn split_list(value: &str) -> Vec<String> {
     value
         .split(',')
@@ -204,7 +214,6 @@ fn split_list(value: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
-
     fn fixture(contents: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(
             "englishlint-config-{}.ini",
@@ -216,7 +225,6 @@ mod tests {
         fs::write(&path, contents).unwrap();
         path
     }
-
     #[test]
     fn parses_limits_ignores_and_glossary() {
         let path = fixture(
@@ -228,7 +236,6 @@ mod tests {
         assert_eq!(config.glossary["check"], "verify");
         let _ = fs::remove_file(path);
     }
-
     #[test]
     fn rejects_unknown_rule_and_glossary() {
         for contents in [
