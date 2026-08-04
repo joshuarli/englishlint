@@ -7,3 +7,4 @@ license = "MIT"
 
 [dependencies]
 ignore = "0.4"
+pulldown-cmark = "0.13"
