@@ -1,0 +1,18 @@
+# Copy this file to englishlint.ini in the project root.
+[lint]
+# Files use descriptive mode unless a heading or directive selects procedural mode.
+default_type = descriptive
+procedural_limit = 20
+descriptive_limit = 25
+# Comma-separated headings that imply procedural text.
+procedural_headings = install, setup, configure, troubleshooting, migration, deploy
+# Ignore rules globally, for example: ignore_rules = ENG014
+ignore_rules =
+# Ignore words globally, for example: ignore_words = robust, widget
+ignore_words =
+
+# Set the preferred term for a concept. This also makes ENG010 actionable.
+[glossary]
+# check = make sure
+# config = configuration
+# delete = delete
