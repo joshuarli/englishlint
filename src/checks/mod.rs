@@ -13,7 +13,6 @@ pub(crate) mod multiple_instructions;
 pub(crate) mod noun_chains;
 pub(crate) mod paragraphs;
 pub(crate) mod passive;
-pub(crate) mod semicolons;
 pub(crate) mod sentence_length;
 pub(crate) mod spelling;
 pub(crate) mod tenses;

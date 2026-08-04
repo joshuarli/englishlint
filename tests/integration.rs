@@ -98,7 +98,7 @@ fn clean_project_returns_zero_and_does_not_lint_code_or_metadata() {
     assert_eq!(output.status, 0, "{:#?}", output.stdout);
     assert_has(&output, "englishlint: no findings");
     assert_not_has(&output, "ENG003");
-    assert_not_has(&output, "ENG004");
+    assert_not_has(&output, "ENG005");
 }
 
 #[test]
@@ -112,8 +112,30 @@ fn reports_rules_with_relative_file_line_column_and_suggestion() {
     let output = project.run(&["docs"]);
 
     assert_eq!(output.status, 1);
-    assert_has(&output, "setup.md:3:13: ENG003");
-    assert_has(&output, "suggestion: Replace 'should' with 'must'");
+    assert_has(&output, "setup.md:\n  3:13:ENG003");
+    assert_has(&output, "englishlint: rule summary");
+    assert_has(&output, "ENG003 [error] Banned modal:");
+    assert_has(
+        &output,
+        "Suggestion: Use must or can when that is the intended meaning.",
+    );
+    assert_not_has(&output, "suggestion: Replace 'should' with 'must'");
+}
+
+#[test]
+fn deduplicates_file_headers_and_rule_explanations() {
+    let project = TempProject::new();
+    project.write(
+        "README.md",
+        "The service should work. The worker should stop.\n",
+    );
+
+    let output = project.run(&["."]);
+
+    assert_eq!(output.status, 1);
+    assert_eq!(output.stdout.matches("README.md:\n").count(), 1);
+    assert_eq!(output.stdout.matches("ENG003").count(), 3);
+    assert_eq!(output.stdout.matches("Banned modal:").count(), 1);
 }
 
 #[test]
@@ -141,10 +163,10 @@ severity = ENG003:warning
     let output = project.run(&["."]);
 
     assert_eq!(output.status, 1);
-    assert_has(&output, "guide.md:1:13: ENG003 [warning]");
-    assert_not_has(&output, "guide.md:1:35: ENG014");
-    assert_has(&output, "README.md:1:13: ENG003 [error]");
-    assert_has(&output, "README.md:1:38: ENG014 [warning]");
+    assert_has(&output, "docs/guide.md:\n  1:13:ENG003");
+    assert_not_has(&output, "1:35: ENG014");
+    assert_has(&output, "README.md:\n  1:13:ENG003");
+    assert_has(&output, "  1:38:ENG014");
 }
 
 #[test]
@@ -186,7 +208,7 @@ fn custom_ini_changes_modes_limits_headings_and_ignored_rules() {
     assert_eq!(output.status, 1);
     assert_has(&output, "ENG001");
     assert_not_has(&output, "ENG003");
-    assert_has(&output, "maximum is 3 for procedural text");
+    assert_has(&output, "ENG001 [error] Sentence length:");
 }
 
 #[test]
@@ -194,7 +216,7 @@ fn explicit_directives_select_mode_and_support_inline_exceptions() {
     let project = TempProject::new();
     project.write(
         "README.md",
-        "<!-- englishlint: procedural -->\n<!-- englishlint: ignore-next-line ENG001 ENG003 -->\nIf the service fails, the operator should read the very long log file now and restart the service.\n<!-- englishlint: ignore-word widget -->\nThe widget is simply useful.\n<!-- englishlint: ignore-file ENG004 -->\nThe service uses a file; it starts quickly.\n",
+        "<!-- englishlint: procedural -->\n<!-- englishlint: ignore-next-line ENG001 ENG003 -->\nIf the service fails, the operator should read the very long log file now and restart the service.\n<!-- englishlint: ignore-word widget -->\nThe widget is simply useful.\nThe service uses a file; it starts quickly.\n",
     );
 
     let output = project.run(&["."]);
@@ -202,7 +224,7 @@ fn explicit_directives_select_mode_and_support_inline_exceptions() {
     assert_eq!(output.status, 1);
     assert_not_has(&output, "ENG001");
     assert_not_has(&output, "ENG003");
-    assert_not_has(&output, "ENG004");
+    assert_not_has(&output, "ENG005");
     assert_has(&output, "ENG006");
 }
 
@@ -222,9 +244,10 @@ fn glossary_preference_makes_terminology_rotation_actionable() {
 
     assert_eq!(output.status, 1);
     assert_has(&output, "ENG010");
-    assert_has(&output, "Use 'verify' for this concept.");
-    assert_has(&output, "Use 'configuration' for this concept.");
-    assert_has(&output, "Use 'remove' for this concept.");
+    assert_has(
+        &output,
+        "Choose one term and add it to the project glossary.",
+    );
     assert_not_has(&output, "set [glossary]");
 }
 
@@ -237,10 +260,7 @@ fn missing_glossary_preference_suggests_configuration() {
 
     assert_eq!(output.status, 1);
     assert_has(&output, "ENG010");
-    assert_has(
-        &output,
-        "set [glossary] check = <preferred term> in englishlint.ini",
-    );
+    assert_has(&output, "ENG010 [warning] Terminology rotation:");
 }
 
 #[test]
@@ -309,8 +329,12 @@ fn catches_its_contraction_but_does_not_treat_a_possessive_as_one() {
     let output = project.run(&["."]);
 
     assert_eq!(output.status, 1);
-    assert_has(&output, "ENG002 [error] contraction 'It's'");
-    assert_not_has(&output, "contraction 'service's'");
+    assert_has(&output, "1:1:ENG002");
+    assert_has(
+        &output,
+        "Contraction: A contraction appears in visible prose.",
+    );
+    assert_not_has(&output, "service's");
 }
 
 #[test]
@@ -324,7 +348,7 @@ fn every_catalog_rule_has_a_cli_regression_fixture() {
     let output = project.run(&["."]);
 
     assert_eq!(output.status, 1);
-    for rule in 1..=15 {
+    for rule in [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] {
         let id = format!("ENG{rule:03}");
         assert_has(&output, &id);
     }

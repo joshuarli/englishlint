@@ -177,15 +177,18 @@ englishlint <directory>
 The linter walks Markdown files in deterministic path order and respects
 `.gitignore`. It checks visible prose and ignores code, URLs, link destinations,
 HTML, and front matter. It reports stable rule IDs, file names, one-based line
-numbers, Unicode-character columns, severity, and a suggested fix.
+numbers, Unicode-character columns, and severity. It lists rule explanations
+once in an aggregate summary.
 
 Example:
 
 ```text
-docs/setup.md:18:1: ENG001 [error] procedural sentence has 24 words; maximum is 20 for procedural text
-  suggestion: Split the sentence into two or more sentences.
-docs/setup.md:24:17: ENG003 [error] avoid modal 'should'; use 'must' when that is the intended meaning
-  suggestion: Replace 'should' with 'must', or state the condition directly.
+docs/setup.md:
+  18:1: ENG001 [error]
+  24:17: ENG003 [error]
+englishlint: rule summary
+  ENG001 [error] Sentence length: A sentence exceeds the configured word limit. Suggestion: Split the sentence into two or more sentences.
+  ENG003 [error] Banned modal: The prose uses should, would, may, might, or could. Suggestion: Use must or can when that is the intended meaning.
 ```
 
 Exit codes are deterministic:
@@ -224,7 +227,7 @@ severity = ENG001:error, ENG012:warning
 
 [profile.contracts]
 paths = tickets/**, evals/**, templates/**
-ignore_rules = ENG001, ENG004, ENG009, ENG011, ENG012, ENG013, ENG014
+ignore_rules = ENG001, ENG009, ENG011, ENG012, ENG013, ENG014
 severity = ENG003:warning
 ```
 

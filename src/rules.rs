@@ -3,31 +3,30 @@
 use std::fmt;
 use std::str::FromStr;
 
+#[repr(usize)]
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum RuleId {
-    SentenceLength,
-    Contraction,
-    BannedModal,
-    Semicolon,
-    LatinAbbreviation,
-    FillerWord,
-    TrailingCondition,
-    ComplexTense,
-    IngClause,
-    TerminologyRotation,
-    LongNounChain,
-    ParagraphLength,
-    MultipleInstructions,
-    PassiveVoice,
-    AmericanSpelling,
+    SentenceLength = 0,
+    Contraction = 1,
+    BannedModal = 2,
+    LatinAbbreviation = 4,
+    FillerWord = 5,
+    TrailingCondition = 6,
+    ComplexTense = 7,
+    IngClause = 8,
+    TerminologyRotation = 9,
+    LongNounChain = 10,
+    ParagraphLength = 11,
+    MultipleInstructions = 12,
+    PassiveVoice = 13,
+    AmericanSpelling = 14,
 }
 
 impl RuleId {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 14] = [
         Self::SentenceLength,
         Self::Contraction,
         Self::BannedModal,
-        Self::Semicolon,
         Self::LatinAbbreviation,
         Self::FillerWord,
         Self::TrailingCondition,
@@ -48,7 +47,10 @@ impl RuleId {
     }
 
     pub(crate) fn definition(self) -> &'static RuleDefinition {
-        &DEFINITIONS[self as usize]
+        catalog()
+            .iter()
+            .find(|definition| definition.metadata.id == self)
+            .expect("every rule has a definition")
     }
 }
 
@@ -57,8 +59,10 @@ impl fmt::Display for RuleId {
         write!(f, "ENG{:03}", *self as usize + 1)
     }
 }
+
 impl FromStr for RuleId {
     type Err = ();
+
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value).ok_or(())
     }
@@ -100,7 +104,7 @@ macro_rules! rule {
     };
 }
 
-static DEFINITIONS: [RuleDefinition; 15] = [
+static DEFINITIONS: [RuleDefinition; 14] = [
     rule!(
         SentenceLength,
         "Sentence length",
@@ -124,14 +128,6 @@ static DEFINITIONS: [RuleDefinition; 15] = [
         "Use must or can when that is the intended meaning.",
         false,
         crate::lint::checks::modals::check
-    ),
-    rule!(
-        Semicolon,
-        "Semicolon",
-        "A semicolon joins independent sentences.",
-        "Replace the semicolon with a period.",
-        false,
-        crate::lint::checks::semicolons::check
     ),
     rule!(
         LatinAbbreviation,
@@ -223,17 +219,17 @@ static DEFINITIONS: [RuleDefinition; 15] = [
     ),
 ];
 
-pub fn catalog() -> &'static [RuleDefinition; 15] {
+pub fn catalog() -> &'static [RuleDefinition; 14] {
     &DEFINITIONS
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn ids_and_definitions_are_one_to_one() {
         for (index, id) in RuleId::ALL.iter().enumerate() {
-            assert_eq!(*id as usize, index);
             assert_eq!(RuleId::parse(&id.to_string()), Some(*id));
             assert_eq!(catalog()[index].metadata.id, *id);
             assert!(!catalog()[index].metadata.title.is_empty());

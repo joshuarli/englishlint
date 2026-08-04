@@ -1,5 +1,8 @@
 use englishlint::config::Config;
+use englishlint::diagnostic::Severity;
 use englishlint::lint_directory;
+use englishlint::rules::RuleId;
+use std::collections::BTreeMap;
 use std::env;
 use std::path::PathBuf;
 use std::process;
@@ -62,12 +65,19 @@ fn main() {
         }
     };
     let mut total = 0;
+    let mut rule_severities = BTreeMap::<RuleId, Severity>::new();
     for file in results {
-        for diagnostic in file.diagnostics {
-            total += 1;
+        total += file.diagnostics.len();
+        for diagnostic in &file.diagnostics {
+            rule_severities
+                .entry(diagnostic.rule)
+                .and_modify(|severity| *severity = (*severity).min(diagnostic.severity))
+                .or_insert(diagnostic.severity);
+        }
+        if !file.diagnostics.is_empty() {
             print!(
                 "{}",
-                englishlint::output::render(&file.source, &root, &diagnostic)
+                englishlint::output::render_file(&file.source, &root, &file.diagnostics)
             );
         }
     }
@@ -75,6 +85,8 @@ fn main() {
         println!("englishlint: no findings");
         process::exit(0);
     }
+    let summary = rule_severities.into_iter().collect::<Vec<_>>();
+    print!("{}", englishlint::output::render_rule_summary(&summary));
     eprintln!(
         "englishlint: {total} finding{}",
         if total == 1 { "" } else { "s" }

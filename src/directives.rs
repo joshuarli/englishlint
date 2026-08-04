@@ -73,9 +73,13 @@ mod tests {
     use super::*;
     #[test]
     fn parses_file_line_and_word_suppressions() {
-        let set = DirectiveSet::parse("<!-- englishlint: ignore-file ENG003 -->\n<!-- englishlint: ignore-next-line ENG004 -->\n<!-- englishlint: ignore-word widget -->\n");
+        let set = DirectiveSet::parse("<!-- englishlint: ignore-file ENG003 -->\n<!-- englishlint: ignore-next-line ENG005 -->\n<!-- englishlint: ignore-word widget -->\n");
         assert!(set.file.contains(&RuleId::BannedModal));
-        assert!(set.lines.get(&3).unwrap().contains(&RuleId::Semicolon));
+        assert!(set
+            .lines
+            .get(&3)
+            .unwrap()
+            .contains(&RuleId::LatinAbbreviation));
         assert!(set.words.contains("widget"));
     }
 }

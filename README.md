@@ -25,7 +25,9 @@ cargo build --release
 The library also exposes `lint_text` for editors and other Rust callers. It returns
 structured diagnostics with source spans; the CLI is only one renderer.
 
-Each finding includes its severity as `[error]`, `[warning]`, or `[info]`. Profiles can suppress or limit rules for path classes without changing the source.
+Each location includes its severity as `[error]`, `[warning]`, or `[info]`.
+The output lists each rule explanation once in an aggregate summary.
+Profiles can suppress or limit rules for path classes without changing the source.
 
 The command walks `.md` files in deterministic path order, respects `.gitignore`,
 and follows no symlinks. It lints visible prose only. It ignores fenced code, inline
@@ -45,10 +47,12 @@ Exit codes:
 Example output:
 
 ```text
-docs/setup.md:18:1: ENG001 procedural sentence has 24 words; maximum is 20 for procedural text
-  suggestion: Split the sentence into two or more sentences.
-docs/setup.md:24:17: ENG003 avoid modal 'should'; use 'must' when that is the intended meaning
-  suggestion: Replace 'should' with 'must', or state the condition directly.
+docs/setup.md:
+  18:1: ENG001 [error]
+  24:17: ENG003 [error]
+englishlint: rule summary
+  ENG001 [error] Sentence length: A sentence exceeds the configured word limit. Suggestion: Split the sentence into two or more sentences.
+  ENG003 [error] Banned modal: The prose uses should, would, may, might, or could. Suggestion: Use must or can when that is the intended meaning.
 ```
 
 ## Configuration
@@ -81,7 +85,7 @@ severity = ENG001:error, ENG012:warning
 
 [profile.contracts]
 paths = tickets/**, evals/**, templates/**
-ignore_rules = ENG001, ENG004, ENG009, ENG011, ENG013, ENG014
+ignore_rules = ENG001, ENG009, ENG011, ENG013, ENG014
 severity = ENG003:warning
 ```
 
